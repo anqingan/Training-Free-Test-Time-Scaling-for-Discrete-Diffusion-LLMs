@@ -1,0 +1,41 @@
+experiment:
+    project: "lladav_eval"
+    num_node: 1
+    node_index: 0
+
+system:
+    HTTP_PROXY: null
+    HF_HOME: null
+    env_name: ""
+    envs_dir: "/path/to/envs"
+    base_dir: "/path/to/Training-Free-Test-Time-Scaling-for-Discrete-Diffusion-LLMs"
+
+model: "/path/to/llada-v-model"
+model_base: "lladav"
+answer_must_in_box: True
+
+dataset:
+    eval_dataset: "mmbench_en_dev"
+    lmms_task: "mmbench_en_dev_lite"
+    lmms_task_dir: "LLaDA-V-upstream/eval/lmms-eval/lmms_eval/tasks"
+    data_type: "mmu"
+    image_root: "/path/to/images"
+
+execute:
+    num_chunk: 128
+
+rollout:
+    num_response_per_task: 2
+    temperature: 0.25
+    steps: 128
+    max_gen_length: 256
+    batch_size: 2
+    remasking_strategy: ["low_confidence_static", "low_confidence_dynamic"]
+    target: "confidence"
+    dynamic_threshold: 0.90
+    block_size: 64
+    further_horizon: 128
+    output_unmasking_history: False
+    use_cache: True
+    mcmc_steps: 3
+    mcmc_alpha: 4.0

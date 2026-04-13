@@ -1,0 +1,31 @@
+experiment:
+    project: "the_new_llada_eval"
+    num_node: 1
+    node_index: 0
+
+model: "/path/to/llada-model"
+model_base: "llada"
+
+dataset:
+    eval_dataset: "MATH500"
+    data_type: "math"
+    eval_first_n: 0
+
+rollout:
+    num_response_per_task: 2
+    temperature: 0.25
+    steps: 128
+    max_gen_length: 256
+    batch_size: 1
+    remasking_strategy: "low_confidence_static"
+    target: "confidence"
+    dynamic_threshold: 0.95
+    block_size: 32
+    mcmc_alpha: 4.0
+    mcmc_steps: 2
+    num_candidates: 2
+    intra_mcmc_steps: 1
+    intra_mcmc_alpha: 4.0
+    intra_num_candidates: 2
+    further_horizon: 128
+    use_cache: True
