@@ -39,19 +39,6 @@ The repository is organized around the practical implementation of training-free
 `-- README.md
 ```
 
-## Core Files
-
-If you only want to inspect the method implementation, start from the following files:
-
-- `sample/the_new_llada_sample.py`
-  Main implementation of the text/code decoding path with the retained Two-Scale MTM logic.
-- `sample/lladav_sample.py`
-  Multimodal decoding entrypoint kept as a lightweight reference path.
-- `sample/llada/modeling_llada.py`
-  Local LLaDA model wrapper used by the retained decoding pipeline.
-- `sample/llada/configuration_llada.py`
-  LLaDA configuration definition required by the local model wrapper.
-
 ## Configuration
 
 Two minimal configuration files are kept in `configs/`:
