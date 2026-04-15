@@ -1,84 +1,139 @@
-# Training-Free Test-Time Scaling for Discrete Diffusion LLMs
+# Two-Scale MTM for Discrete Diffusion LLMs
 
-This repository contains a curated code subset for the paper **"Training-Free Test-Time Scaling for Discrete Diffusion LLMs via Two-Scale Parallel Group Refinement."**
+Official inference and evaluation code for the paper:
 
-The code was extracted and cleaned from a larger internal `dLLM-RL-main` workspace. Only the paper-related inference, evaluation, and model-adaptation components are kept here. Training code, RL/SFT pipelines, datasets, figures, PDFs, and unrelated model backends have been removed.
+> **Training-Free Test-Time Scaling for Discrete Diffusion LLMs via Two-Scale Parallel Group Refinement**
 
-## Included Components
+This repository provides a focused, paper-oriented release of the decoder-side refinement pipeline used in our study. It is intentionally lightweight: only the components required to run the proposed text/code and multimodal inference pipelines are kept here.
 
-- `sample/the_new_llada_sample.py`: main text/code inference entry for the paper's LLaDA-based refinement pipeline
-- `sample/lladav_sample.py`: multimodal sampling entry used for the LLaDA-V evaluation path
-- `eval.py`: text/code evaluation driver
-- `eval_v.py`: multimodal evaluation driver
-- `reward/`: metric and post-processing utilities
-- `configs/`: minimal config templates for text/code and multimodal evaluation
-- `sample/llada/` and `sample/llava/`: local model code required by the kept inference paths
+## Highlights
 
-## Not Included
+- Training-free test-time scaling for discrete diffusion language models
+- Two-scale refinement with local and global proposal updates
+- Support for both text/code reasoning and multimodal LLaDA-V evaluation
+- Minimal paper release without RL/SFT training clutter
 
-- RL training and value-model code
-- SFT pipelines
+## What Is Included
+
+- Paper inference entrypoints for LLaDA and LLaDA-V
+- Evaluation drivers for text/code and multimodal benchmarks
+- Minimal reward and result-aggregation utilities
+- Local model adapters required by the retained inference paths
+- Ready-to-edit config files for the paper release
+
+## What Is Not Included
+
+- Reinforcement learning training
+- Supervised fine-tuning
 - Multi-node orchestration
-- Unrelated diffusion backends such as Dream, SDAR, and TraDo
-- Datasets, checkpoints, benchmark images, and paper assets
+- Unrelated diffusion backends from the larger internal research workspace
+- Datasets, checkpoints, figures, and paper PDFs
 
-## Environment
+## Repository Layout
 
-The original project used Python 3.10. Install dependencies with:
+```text
+.
++-- configs/
+|   +-- llada_twoscale_eval.yaml
+|   +-- lladav_twoscale_eval.yaml
+|   +-- the_new_llada_eval.yaml
+|   `-- lladav_eval.yaml
++-- reward/
+|   +-- execute.py
+|   +-- math_utils.py
+|   +-- math_utils_v.py
+|   +-- reward.py
+|   `-- reward_v.py
++-- sample/
+|   +-- the_new_llada_sample.py
+|   +-- lladav_sample.py
+|   +-- llada/
+|   `-- llava/
++-- eval.py
++-- eval_v.py
++-- generate.py
++-- lmms_eval_adapter.py
+`-- requirements.txt
+```
+
+## Core Files
+
+If you only want to understand the method implementation, start here:
+
+- [`sample/the_new_llada_sample.py`](sample/the_new_llada_sample.py)
+  Main implementation of the paper's LLaDA text/code inference pipeline. This is the most important file in the repository.
+- [`sample/lladav_sample.py`](sample/lladav_sample.py)
+  Multimodal decoding path for LLaDA-V.
+- [`eval.py`](eval.py)
+  Text/code evaluation entrypoint.
+- [`eval_v.py`](eval_v.py)
+  Multimodal evaluation entrypoint.
+- [`reward/reward.py`](reward/reward.py)
+  Text/math result aggregation and scoring.
+- [`reward/reward_v.py`](reward/reward_v.py)
+  Multimodal result aggregation and scoring.
+
+## Installation
+
+The original environment used Python 3.10.
 
 ```bash
 pip install -r requirements.txt
 ```
 
-You will also need the corresponding LLaDA or LLaDA-V checkpoints available locally.
+You also need local checkpoints for the corresponding LLaDA or LLaDA-V model family.
 
-## Text / Code Evaluation
+## Quick Start
 
-Edit `configs/the_new_llada_eval.yaml` first:
+### Text / Code Evaluation
 
-- set `model` to your local LLaDA checkpoint path
-- set the dataset fields you want to evaluate
-- adjust rollout hyperparameters as needed
+Edit [`configs/llada_twoscale_eval.yaml`](configs/llada_twoscale_eval.yaml):
 
-Run:
+- set `model` to your local LLaDA checkpoint
+- set `dataset.eval_dataset` and `dataset.data_type`
+- adjust rollout hyperparameters if needed
+
+Then run:
 
 ```bash
-python eval.py config=configs/the_new_llada_eval.yaml
+python eval.py config=configs/llada_twoscale_eval.yaml
 ```
 
-This curated repo routes `eval.py` directly to `sample/the_new_llada_sample.py`, which is the retained paper-specific text/code inference entry.
+### Multimodal Evaluation
 
-## Multimodal Evaluation
+Edit [`configs/lladav_twoscale_eval.yaml`](configs/lladav_twoscale_eval.yaml):
 
-Edit `configs/lladav_eval.yaml` first:
-
-- set `model` to your local LLaDA-V checkpoint path
+- set `model` to your local LLaDA-V checkpoint
 - set `image_root` to the benchmark image directory
-- confirm the `lmms_task` and `lmms_task_dir` settings for your local setup
+- check the `lmms_task` and local `lmms-eval` path
 
-Run:
+Then run:
 
 ```bash
-python eval_v.py config=configs/lladav_eval.yaml
+python eval_v.py config=configs/lladav_twoscale_eval.yaml
 ```
 
-## Note on `lmms-eval`
+## Outputs
 
-The multimodal evaluation path depends on a local `lmms-eval` checkout compatible with the original LLaDA-V evaluation stack. By default, `lmms_eval_adapter.py` expects it under:
+Outputs are written under the experiment directory defined in the config, typically including:
+
+- `temp_data/outputs-*.json`
+- `results/results-*.txt`
+
+## Notes on `lmms-eval`
+
+The multimodal path depends on a local `lmms-eval` checkout compatible with the LLaDA-V evaluation stack. By default, [`lmms_eval_adapter.py`](lmms_eval_adapter.py) expects:
 
 ```text
 LLaDA-V-upstream/eval/lmms-eval
 ```
 
-If your checkout lives elsewhere, update the path in `configs/lladav_eval.yaml` or adjust `lmms_eval_adapter.py` accordingly.
+Adjust the path in the config or in the adapter if your environment differs.
 
-## Outputs
+## Reproducibility Scope
 
-Evaluation outputs are written under the experiment directory defined in the config, typically including:
+This repository is a paper release, not a full framework release. The goal is to keep the code path for the proposed decoder-side refinement mechanism clear, compact, and easy to inspect.
 
-- `temp_data/outputs-*.json`
-- `results/results-*.txt`
+## Acknowledgment
 
-## Scope
-
-This repository is intentionally narrow. It is meant to host the paper-related decoding and evaluation code in a cleaner form, not to preserve the full upstream research framework.
+This repository was curated from a larger internal research workspace and reduced to the method-relevant components needed for this paper release.
