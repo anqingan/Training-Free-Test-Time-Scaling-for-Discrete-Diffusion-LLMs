@@ -52,7 +52,6 @@ class DiffusionOutput:
     mcmc_log:  List[List[dict]] | None = None
 
 
-# ──────────────────────────── Likelihood Helpers ────────────────────────────────
 
 def compute_sequence_log_likelihood(
     model,
@@ -60,12 +59,12 @@ def compute_sequence_log_likelihood(
     start_idx: int,
     block_size: int,
     mask_id: int,
-    horizon: int = 0,   # 给每块额外保留多少“未来 mask token”作为上下文，0=只到块末尾
+    horizon: int = 0,
 ) -> torch.Tensor:
     """
     Blockwise n-forward scoring (approximate), aligned with suffix-masked proposal:
 
-      score ≈ Σ_blocks Σ_{i in block} log pθ(x_i | x_<start, mask_{start:end})
+      score 閳?鍗盻blocks 鍗盻{i in block} log p鑳?x_i | x_<start, mask_{start:end})
 
     where end = min(L, e + horizon) and we truncate beyond end.
 
@@ -83,31 +82,27 @@ def compute_sequence_log_likelihood(
     ll = torch.zeros(N, device=device, dtype=torch.float64)
     horizon = max(0, int(horizon))
 
-    # iterate blocks on suffix
     for s in range(start_idx, L, block_size):
         e = min(s + block_size, L)
         end = min(L, e + horizon)
 
-        # prefix fixed, truncated suffix masked (do NOT feed candidate tokens for suffix)
         temp_x = sequences[:, :end].clone()
         temp_x[:, start_idx:end] = mask_id
 
         with torch.no_grad():
-            logits = model(temp_x).logits  # [N, end, V]
+            logits = model(temp_x).logits
 
-        # score this block only
-        lg = logits[:, s:e, :].float()      # [N, c, V]
-        tg = sequences[:, s:e]              # [N, c]
+        lg = logits[:, s:e, :].float()
+        tg = sequences[:, s:e]
 
-        chosen = torch.gather(lg, dim=-1, index=tg.unsqueeze(-1)).squeeze(-1)  # [N, c]
-        logZ = torch.logsumexp(lg, dim=-1)                                     # [N, c]
+        chosen = torch.gather(lg, dim=-1, index=tg.unsqueeze(-1)).squeeze(-1)
+        logZ = torch.logsumexp(lg, dim=-1)
         ll += (chosen - logZ).sum(dim=1).to(torch.float64)
 
     return ll
 
 
 
-# ──────────────────────────── Generation Logic ────────────────────────────────
 
 def run_diffusion_generation_batch(
     model,
@@ -139,7 +134,6 @@ def run_diffusion_generation_batch(
     nfe = 0
     cgws = further_horizon
 
-    # Main Block Loop
     for blk in range(start_block_idx, num_blocks):
         s = L0 + blk * block_size
         e = min(L0 + (blk + 1) * block_size, total_len)
@@ -153,7 +147,6 @@ def run_diffusion_generation_batch(
         else:
             window_slice = None
 
-        # Definition: run_block_once
         def run_block_once(
             current_x,
             step_offset: int = 0,
@@ -193,7 +186,6 @@ def run_diffusion_generation_batch(
             mask_all = (current_x == mask_id)
             mask_all[:, e:] = 0
 
-            # ✅ get_transfer_index now returns x0_logp (true logprob of chosen token)
             x0, tr_idx, x0_p, x0_logp = get_transfer_index(
                 logits_initial, temperature, target, mask_all,
                 current_x, num_transfer[:, 0], unmask_threshold
@@ -206,7 +198,6 @@ def run_diffusion_generation_batch(
                 if block_tr.any():
                     update_mask = block_tr & (first_steps < 0)
                     if update_mask.any():
-                        # ✅ score uses value logprob, not log(confidence)
                         token_log_probs[update_mask] = x0_logp[:, s:e][update_mask]
                         first_steps[update_mask] = step_offset
 
@@ -228,7 +219,6 @@ def run_diffusion_generation_batch(
                         mask_blk, current_x[:, s:], num_transfer[:, step_transfer_idx], unmask_threshold)
 
                     if tr_idx.any():
-                        # ✅ avoid view+advanced-index write aliasing
                         tmp = current_x[:, s:].clone()
                         tmp[tr_idx] = x0[tr_idx].clone()
                         current_x[:, s:] = tmp
@@ -247,7 +237,6 @@ def run_diffusion_generation_batch(
                         mask_blk, current_x[:, s:], num_transfer[:, step_transfer_idx], unmask_threshold)
 
                     if tr_idx.any():
-                        # ✅ avoid view+advanced-index write aliasing
                         tmp = current_x[:, s:].clone()
                         tmp[tr_idx] = x0[tr_idx].clone()
                         current_x[:, s:] = tmp
@@ -420,7 +409,6 @@ def generate_with_prefix_cache(
     mcmc_records = [[] for _ in range(B)] if mcmc_log else None
     total_nfe = 0
 
-    # ── Phase 1: Initial Generation (Includes Intra-Block MTM) ──
     cprint(f"Phase 1: Initial Generation (Intra-MTM steps={intra_mcmc_steps}, K={intra_num_candidates})...", "cyan")
     x, nfe = run_diffusion_generation_batch(
         model, x, start_idx=L0, L0=L0, steps=steps, block_size=block_length,
@@ -433,7 +421,6 @@ def generate_with_prefix_cache(
     total_nfe += nfe
     hist.append(x.clone().cpu())
 
-    # ── Phase 2: Inter-Block MTM Refinement ──
     if mcmc_steps > 0:
         K = max(1, int(num_candidates))
         cprint(f"Phase 2: Inter-Block MTM Refinement (Steps={mcmc_steps}, K={K})...", "cyan")
@@ -444,7 +431,6 @@ def generate_with_prefix_cache(
             m = random.randint(0, num_gen_blocks - 1)
             mask_start_idx = L0 + m * block_length
 
-            # Step 1: Forward Proposal
             if K == 1:
                 y, nfe_fwd = run_diffusion_generation_batch(
                     model, x.clone(), start_idx=mask_start_idx, L0=L0, steps=steps,
@@ -470,7 +456,6 @@ def generate_with_prefix_cache(
                 hist.append(x.clone().cpu())
                 continue
 
-            # K>=2：多候选 MTM
             x_expanded = expand_inputs_for_candidates(x, K)
 
             y_candidates, nfe_fwd = run_diffusion_generation_batch(
@@ -495,7 +480,6 @@ def generate_with_prefix_cache(
 
             log_W_forward = torch.logsumexp(log_w_y_reshaped, dim=-1)
 
-            # Step 3: Backward Proposal
             z_inputs = expand_inputs_for_candidates(y_star, K)
             for b in range(B):
                 z_inputs[b * K] = x[b]
@@ -533,7 +517,6 @@ def generate_with_prefix_cache(
 
 
 def expand_inputs_for_candidates(inputs: torch.Tensor, K: int) -> torch.Tensor:
-    # 关键：不要用 expand()，会产生共享内存 view，后续写入必炸
     if K == 1:
         return inputs
     return inputs.repeat_interleave(K, dim=0).contiguous()
@@ -545,7 +528,7 @@ def get_transfer_index(logits, temperature, target, mask_index, x, num_transfer_
       x0: tokens after applying masked positions
       transfer_index: which positions to transfer (fill) this step
       x0_p: selection score (confidence/margin/entropy/random)
-      x0_logp: ✅ true logprob of chosen token under softmax(logits)
+      x0_logp: 閴?true logprob of chosen token under softmax(logits)
     """
     logits_with_noise = add_gumbel_noise(logits, temperature=temperature)
     x0 = torch.argmax(logits_with_noise, dim=-1)
@@ -566,7 +549,6 @@ def get_transfer_index(logits, temperature, target, mask_index, x, num_transfer_
     else:
         raise NotImplementedError(target)
 
-    # ✅ value 项：真实 logprob
     logp_vocab = F.log_softmax(logits.to(torch.float64), dim=-1)
     x0_logp = torch.squeeze(
         torch.gather(logp_vocab, dim=-1, index=torch.unsqueeze(x0, -1)), -1
@@ -779,7 +761,7 @@ if __name__ == "__main__":
         system_prompts_function = '''<|startoftext|><|start_header_id|>user<|end_header_id|>{{problem}}\nPlace your code within a single Python code block ```python ```. Do not include more than one code block. <|eot_id|><|startoftext|><|start_header_id|>assistant<|end_header_id|>\n'''
         system_prompts_stdio = '''<|startoftext|><|start_header_id|>user<|end_header_id|>This is the problem:\n{{problem}}\n You should put your code in ```python ```. Use input() to read input and print() to produce output in your script. <|eot_id|><|startoftext|><|start_header_id|>assistant<|end_header_id|>\n'''
     elif config.dataset.data_type == "option":
-        system_prompts = '''<|startoftext|><|start_header_id|>user<|end_header_id|>This is the problem:\n{{problem}}\nYou need to think step by step and put the final option (A, B, C, or D only—no other character) in \\boxed{}. <|eot_id|><|startoftext|><|start_header_id|>assistant<|end_header_id|>\n'''
+        system_prompts = '''<|startoftext|><|start_header_id|>user<|end_header_id|>This is the problem:\n{{problem}}\nYou need to think step by step and put the final option (A, B, C, or D only閳ユ攺o other character) in \\boxed{}. <|eot_id|><|startoftext|><|start_header_id|>assistant<|end_header_id|>\n'''
 
     outputs_name = "eval-" + pretrained_model.replace("/", ".") + "-" + dataset
     script_dir = os.path.dirname(os.path.abspath(__file__))
